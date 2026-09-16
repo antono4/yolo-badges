@@ -67,6 +67,14 @@ jobs:
               "https://api.github.com/repos/${OWNER}/${REPO}" | jq -r '.description // ""')
           fi
           [ "$REPO_DESC" = "null" ] && REPO_DESC=""
+          # Deskripsi seperti "-", "--", ".", "n/a" bukan tagline; perlakukan
+          # sebagai kosong agar tidak muncul sebagai <em>-</em> di header.
+          REPO_DESC=$(printf '%s' "$REPO_DESC" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+          case "$REPO_DESC" in
+            -|--|---|.|..|n/a|N/A|na|none|None|NULL|"") REPO_DESC="" ;;
+          esac
+          # Buang juga deskripsi yang hanya berisi tanda baca/tanda hubung
+          if ! printf '%s' "$REPO_DESC" | grep -qE '[[:alnum:]]'; then REPO_DESC=""; fi
 
           TITLE=""
           H1=""
@@ -82,10 +90,16 @@ jobs:
           TITLE=$(printf '%s' "$TITLE" | sed -E 's/[[:space:]]*[|·—-][[:space:]]+.*$//' | sed 's/[[:space:]]*$//')
           if [ -z "$TITLE" ]; then TITLE="$REPO"; fi
 
-          # Tagline: deskripsi repo -> <h1> -> judul
+          # Tagline: deskripsi repo -> <h1> yang layak -> kosong (blok <p> dihilangkan)
           ROLE="$REPO_DESC"
-          if [ -z "$ROLE" ]; then ROLE="$H1"; fi
-          if [ -z "$ROLE" ]; then ROLE="$TITLE"; fi
+          if [ -z "$ROLE" ] && [ -n "$H1" ]; then
+            H1CLEAN=$(printf '%s' "$H1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+            # <h1> yang isinya cuma nama repo/judul tidak menambah nilai
+            if [ -n "$H1CLEAN" ] && [ "$H1CLEAN" != "$TITLE" ] && [ "$H1CLEAN" != "$REPO" ] \
+               && printf '%s' "$H1CLEAN" | grep -qE '[[:alnum:]]'; then
+              ROLE="$H1CLEAN"
+            fi
+          fi
           # Batasi panjang agar tidak merusak kartu header
           ROLE=$(printf '%s' "$ROLE" | cut -c1-140)
 
@@ -209,10 +223,12 @@ jobs:
             echo ""
             echo "<h1 align=\"center\">${SITE_TITLE} 👋</h1>"
             echo ""
-            echo "<p align=\"center\">"
-            echo "  <em>${SITE_ROLE}</em>"
-            echo "</p>"
-            echo ""
+            if [ -n "$SITE_ROLE" ]; then
+              echo "<p align=\"center\">"
+              echo "  <em>${SITE_ROLE}</em>"
+              echo "</p>"
+              echo ""
+            fi
             echo "<p align=\"center\">"
             echo "  <a href=\"https://github.com/${OWNER}/${REPO}\"><img alt=\"GitHub repo\" src=\"https://img.shields.io/badge/GitHub-${OWNER}/${REPO}-blue?logo=github\"></a>"
             if [ "$PAGES_ENABLED" = "true" ]; then
